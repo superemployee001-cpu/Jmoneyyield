@@ -1,168 +1,226 @@
 # app.py
 import streamlit as st
-from datetime import datetime, timedelta
-import itertools
-import random
+import datetime
+import time
+import pandas as pd
 
-st.set_page_config(page_title="J-Money Yield", layout="centered")
+# -------------------------------------------------
+# Hulk Hogan ASCII Art (unchanged)
+hulk_hogan_art = """
+[PASTE YOUR HULK HOGAN ART HERE – same as before]
+"""
 
-# === SPLASH PAGE ===
-if 'started' not in st.session_state:
-    st.session_state.started = False
+# -------------------------------------------------
+# Define 24-hour buckets: 6 AM → 6 PM (Day) and 6 PM → 6 AM (Night)
+day_buckets = [
+    ("6-7",  datetime.time(6,  0), datetime.time(7,  0)),
+    ("7-8",  datetime.time(7,  0), datetime.time(8,  0)),
+    ("8-9",  datetime.time(8,  0), datetime.time(9,  0)),
+    ("9-10", datetime.time(9,  0), datetime.time(10, 0)),
+    ("10-11",datetime.time(10, 0), datetime.time(11, 0)),
+    ("11-12",datetime.time(11, 0), datetime.time(12, 0)),
+    ("12-1", datetime.time(12, 0), datetime.time(13, 0)),
+    ("1-2",  datetime.time(13, 0), datetime.time(14, 0)),
+    ("2-3",  datetime.time(14, 0), datetime.time(15, 0)),
+    ("3-4",  datetime.time(15, 0), datetime.time(16, 0)),
+    ("4-5",  datetime.time(16, 0), datetime.time(17, 0)),
+    ("5-6",  datetime.time(17, 0), datetime.time(18, 0)),
+]
 
-if not st.session_state.started:
-    st.markdown(
-        """
-        <div style="text-align: center; padding: 50px;">
-            <h1 style="font-size: 3em; color: #1E90FF; font-weight: bold;">
-                J-money cash money yield distribution distributer
-            </h1>
-            <p style="font-size: 1.3em; color: #555;">
-                The dopest yield splitter in the game 💸
-            </p>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-    col1, col2, col3 = st.columns([1, 1, 1])
-    with col2:
-        if st.button("🚀 START THE MONEY FLOW", use_container_width=True):
-            st.session_state.started = True
-            st.rerun()
-    st.stop()
+night_buckets = [
+    ("6-7",  datetime.time(18, 0), datetime.time(19, 0)),
+    ("7-8",  datetime.time(19, 0), datetime.time(20, 0)),
+    ("8-9",  datetime.time(20, 0), datetime.time(21, 0)),
+    ("9-10", datetime.time(21, 0), datetime.time(22, 0)),
+    ("10-11",datetime.time(22, 0), datetime.time(23, 0)),
+    ("11-12",datetime.time(23, 0), datetime.time(0,  0)),
+    ("12-1", datetime.time(0,  0), datetime.time(1,  0)),
+    ("1-2",  datetime.time(1,  0), datetime.time(2,  0)),
+    ("2-3",  datetime.time(2,  0), datetime.time(3,  0)),
+    ("3-4",  datetime.time(3,  0), datetime.time(4,  0)),
+    ("4-5",  datetime.time(4,  0), datetime.time(5,  0)),
+    ("5-6",  datetime.time(5,  0), datetime.time(6,  0)),
+]
 
-# === MAIN APP ===
-st.markdown(
-    "<h1 style='text-align: center; color: #1E90FF;'>J-MONEY YIELD DISTRIBUTOR</h1>",
-    unsafe_allow_html=True
-)
+def minutes(t: datetime.time) -> int:
+    return t.hour * 60 + t.minute
 
-# === Inputs ===
-col1, col2 = st.columns(2)
-with col1:
-    time_range = st.text_input("Time Range", "8am-5pm")
-    total_yield = st.number_input("Total Yield", value=1250.0, step=1.0)
-with col2:
-    target_coils = st.number_input("Target Coils", value=9, min_value=1)
-    target_weight = st.number_input("Target Weight", value=1200.0, step=1.0)
+def apportion(periods, buckets):
+    y = [0.0] * len(buckets)
+    c = [0.0] * len(buckets)
 
-# === Job Tickets ===
-st.subheader("Add Job Tickets (One Per Hour)")
-job_cols = st.columns(3)
-with job_cols[0]:
-    job_ticket = st.text_input("Job #", placeholder="JT-1001", key="job_input")
-with job_cols[1]:
-    coil_weight = st.number_input("Coil Weight (lbs)", min_value=0.1, value=150.0, key="weight_input")
-with job_cols[2]:
-    add_btn = st.button("Add Job")
+    for p in periods:
+        start, finish, coils, yield_ = p['start'], p['finish'], p['coils'], p['yield']
 
-if 'jobs' not in st.session_state:
-    st.session_state.jobs = []
+        # Handle overnight wrap (e.g., 11 PM → 1 AM)
+        if start >= finish:
+            # Assume overnight: finish is next day
+            finish_min = minutes(finish) + 24 * 60
+        else:
+            finish_min = minutes(finish)
+        start_min = minutes(start)
 
-if add_btn and job_ticket.strip():
-    st.session_state.jobs.append((job_ticket.strip(), coil_weight))
-    st.success(f"Added {job_ticket}")
-    st.rerun()
+        dur_min = finish_min - start_min
+        if dur_min <= 0: continue
+        dur_h = dur_min / 60.0
 
-# Show jobs
-if st.session_state.jobs:
-    st.write("**Current Jobs:**")
-    for i, (j, w) in enumerate(st.session_state.jobs):
-        cols = st.columns([1, 4, 2, 1])
-        cols[0].write(f"**{i+1}.**")
-        cols[1].write(f"`{j}`")
-        cols[2].write(f"**{w} lbs**")
-        if cols[3].button("❌", key=f"del_{i}"):
-            st.session_state.jobs.pop(i)
-            st.rerun()
+        rate_coils = coils / dur_h
+        rate_yield = yield_ / dur_h
 
-    if st.button("🗑️ Clear All Jobs"):
-        st.session_state.jobs = []
+        for i, (_, b_start, b_end) in enumerate(buckets):
+            # Convert bucket to minutes (with wrap handling)
+            b_start_min = minutes(b_start)
+            b_end_min = minutes(b_end)
+            if b_start_min >= b_end_min:
+                b_end_min += 24 * 60
+
+            # Overlap in minutes
+            o_start = max(start_min, b_start_min)
+            o_end = min(finish_min, b_end_min)
+            o_min = max(0, o_end - o_start)
+            o_h = o_min / 60.0
+
+            c[i] += o_h * rate_coils
+            y[i] += o_h * rate_yield
+
+    return y, c
+
+# -------------------------------------------------
+# Page Flow
+if 'page' not in st.session_state:
+    st.session_state.page = 'splash'
+
+# ---------- SPLASH ----------
+if st.session_state.page == 'splash':
+    st.title("J money cash money coil yield distribution distributer")
+    if st.button("Let's begin"):
+        st.session_state.page = 'shift'
         st.rerun()
 
-# === RUN BUTTON ===
-if st.button("💰 RUN J-MONEY DISTRIBUTION", type="primary", use_container_width=True):
-    try:
-        # Parse time range
-        start_str, end_str = [s.strip().lower() for s in time_range.split('-')]
-        fmt = '%I%p' if any(x in start_str for x in ['am','pm']) else '%H'
-        start = datetime.strptime(start_str, fmt)
-        end = datetime.strptime(end_str, fmt)
-        if end <= start:
-            end += timedelta(days=1)
-        hours = []
-        cur = start
-        while cur < end:
-            hours.append(cur)
-            cur += timedelta(hours=1)
+# ---------- CHOOSE SHIFT ----------
+elif st.session_state.page == 'shift':
+    st.header("Select Shift")
+    shift = st.radio("Which shift are you tracking?", ["Day (6 AM - 6 PM)", "Night (6 PM - 6 AM)"])
+    if st.button("Next"):
+        st.session_state.shift = "day" if "Day" in shift else "night"
+        st.session_state.page = 'targets'
+        st.rerun()
 
-        jobs = st.session_state.jobs
-        if len(jobs) == 0:
-            st.error("Add at least one job ticket!")
-            st.stop()
-        if len(jobs) != len(hours):
-            st.error(f"Need **{len(hours)}** jobs (one per hour), got **{len(jobs)}**.")
-            st.stop()
+# ---------- TARGETS ----------
+elif st.session_state.page == 'targets':
+    st.header("Set Hourly Targets")
+    target_yield = st.number_input("Target Yield per hour", min_value=0.0, step=0.1)
+    target_coils = st.number_input("Target Coils per hour", min_value=0.0, step=1.0)
+    if st.button("Next"):
+        st.session_state.target_yield = target_yield
+        st.session_state.target_coils = target_coils
+        st.session_state.page = 'loading'
+        st.rerun()
 
-        rates = [w for _, w in jobs]
-        total_rate = sum(rates)
-        if total_rate == 0:
-            st.error("Total coil weight can't be zero.")
-            st.stop()
+# ---------- LOADING ----------
+elif st.session_state.page == 'loading':
+    st.write("Loading the ultimate coil calculator…")
+    st.markdown(f"```{hulk_hogan_art}```")
+    ph = st.empty()
+    bar = "0" * 24
+    for i in range(len(bar)//2 + 1):
+        left = bar[:i]
+        right = left[::-1]
+        ph.text(left.center(len(bar)) + right)
+        time.sleep(0.08)
+    time.sleep(0.5)
+    st.session_state.page = 'entry'
+    st.rerun()
 
-        per_coil_target = target_weight / target_coils
-        total_allocated = 0
-        results = []
+# ---------- DATA ENTRY ----------
+elif st.session_state.page == 'entry':
+    if 'periods' not in st.session_state:
+        st.session_state.periods = []
 
-        for (job, w), h in zip(jobs, hours):
-            y = total_yield * w / total_rate
-            total_allocated += y
-            good = y >= per_coil_target
-            results.append((h, job, w, y, good))
+    st.header("Add Production Periods")
 
-        # === RESULTS ===
-        st.success(f"**DISTRIBUTION COMPLETE** – {len(results)} coils processed!")
-        st.divider()
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        sh = st.selectbox("Start Hour", list(range(1,13)), key='sh')
+    with c2:
+        sm = st.number_input("Start Min", 0,59,0, key='sm')
+    with c3:
+        sa = st.selectbox("Start AM/PM", ["AM","PM"], key='sa')
 
-        green_count = sum(1 for _,_,_,_,g in results if g)
-        st.markdown(f"### 🟢 **{green_count} GREEN BOXES** | 🔴 **{len(results)-green_count} RED**")
+    c4, c5, c6 = st.columns(3)
+    with c4:
+        eh = st.selectbox("Finish Hour", list(range(1,13)), key='eh')
+    with c5:
+        em = st.number_input("Finish Min", 0,59,0, key='em')
+    with c6:
+        ea = st.selectbox("Finish AM/PM", ["AM","PM"], key='ea')
 
-        for h, job, w, y, good in results:
-            color = "🟢" if good else "🔴"
-            pct = y / total_yield * 100
-            st.markdown(
-                f"**{h.strftime('%-I%p')}** | `{job}` | {w:.1f} lbs → **{y:.1f}** {color} **({pct:.1f}%)**"
-            )
+    coils = st.number_input("Coils Ran", min_value=0.0, step=1.0, format="%g")
+    yield_ = st.number_input("Finished Yield", min_value=0.0, step=0.1)
 
-        # === SECRET OPTIMIZE ===
-        with st.expander("Secret Mode: Optimize for MAX GREEN (Ctrl+Alt+O)"):
-            if st.button("RUN OPTIMIZER"):
-                best_green = -1
-                best_order = None
-                perms = [random.sample(jobs, len(jobs)) for _ in range(1000)] if len(jobs) > 7 else itertools.permutations(jobs)
+    if st.button("Add Period"):
+        # Convert to 24h
+        start_h = sh if sa == "AM" else sh + 12
+        if sh == 12: start_h = 0 if sa == "AM" else 12
+        finish_h = eh if ea == "AM" else eh + 12
+        if eh == 12: finish_h = 0 if ea == "AM" else 12
 
-                for perm in perms:
-                    rs = [w for _, w in perm]
-                    tr = sum(rs)
-                    green = sum(1 for w in rs if total_yield * w / tr >= per_coil_target)
-                    if green > best_green:
-                        best_green = green
-                        best_order = perm
+        period = {
+            'start': datetime.time(start_h, sm),
+            'finish': datetime.time(finish_h, em),
+            'coils': coils,
+            'yield': yield_
+        }
+        st.session_state.periods.append(period)
+        st.success("Period added!")
 
-                if best_order:
-                    st.balloons()
-                    st.success(f"**BEST ORDER: {best_green} GREEN BOXES!**")
-                    for j, w in best_order:
-                        st.write(f"→ `{j}` ({w} lbs)")
-                    if st.button("Use This Order"):
-                        st.session_state.jobs = list(best_order)
-                        st.rerun()
-                else:
-                    st.info("No better order found.")
+    if st.session_state.periods:
+        st.subheader("Recorded Periods")
+        for i, p in enumerate(st.session_state.periods, 1):
+            s = p['start'].strftime('%I:%M %p')
+            f = p['finish'].strftime('%I:%M %p')
+            if p['start'] >= p['finish']:
+                f += " (next day)"
+            st.write(f"**{i}.** {s} → {f} | Coils: {p['coils']} | Yield: {p['yield']}")
 
-    except Exception as e:
-        st.error(f"Error: {e}")
+    if st.button("Calculate Results"):
+        st.session_state.page = 'results'
+        st.rerun()
 
-# === Footer ===
-st.markdown("---")
-st.caption("Made with 💸 by J-Money | Add to Home Screen for App Mode!")
+# ---------- RESULTS ----------
+elif st.session_state.page == 'results':
+    st.header("Hourly Breakdown")
+
+    buckets = day_buckets if st.session_state.shift == "day" else night_buckets
+    shift_name = "Day Shift (6 AM - 6 PM)" if st.session_state.shift == "day" else "Night Shift (6 PM - 6 AM)"
+
+    yields, coils = apportion(st.session_state.periods, buckets)
+
+    df = pd.DataFrame({
+        "Hour": [b[0] for b in buckets],
+        "Yield": [round(y, 2) for y in yields],
+        "Coils": [round(c, 1) for c in coils]
+    })
+    total_yield = round(sum(yields), 2)
+    total_coils = round(sum(coils), 1)
+    df.loc[len(df)] = ["**TOTAL**", total_yield, total_coils]
+
+    def style_val(val, target, is_total=False):
+        if is_total or val in ["", "**TOTAL**"]: return ""
+        v = float(val)
+        return f"color: {'red' if v < target else 'green' if v > target else 'black'}"
+
+    styled = (df.style
+              .applymap(lambda v: style_val(v, st.session_state.target_yield), subset=['Yield'])
+              .applymap(lambda v: style_val(v, st.session_state.target_coils), subset=['Coils'])
+              .format({"Yield": "{:.2f}", "Coils": "{:.1f}"})
+              .set_properties(**{'text-align': 'center'}))
+
+    st.subheader(shift_name)
+    st.dataframe(styled, use_container_width=True)
+
+    if st.button("Start Over"):
+        for k in list(st.session_state.keys()):
+            del st.session_state[k]
+        st.session_state.page = 'splash'
+        st.rerun()
