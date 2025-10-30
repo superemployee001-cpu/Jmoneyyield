@@ -174,7 +174,7 @@ elif st.session_state.page == 'targets':
 
 # ---------- LOADING ----------
 elif st.session_state.page == 'loading':
-    st.write("Loading the ultimate coil calculator…")
+    st.write("Look at you Joe you made it buddy…")
     st.markdown(f"```{hulk_hogan_art}```")
     ph = st.empty()
     bar = "0" * 24
