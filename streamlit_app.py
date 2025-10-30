@@ -263,7 +263,7 @@ elif st.session_state.page == 'results':
     def style_val(val, target, is_total=False):
         if is_total or val in ["", "**TOTAL**"]: return ""
         v = float(val)
-        return f"color: {'red' if v < target else 'green' if v > target else 'black'}"
+        return f"color: {'red' if v < target else 'green' if v > target else 'green'}"
 
     styled = (df.style
               .applymap(lambda v: style_val(v, st.session_state.target_yield), subset=['Yield'])
