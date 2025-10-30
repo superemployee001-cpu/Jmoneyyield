@@ -238,7 +238,7 @@ elif st.session_state.page == 'entry':
                 f += " (next day)"
             st.write(f"**{i}.** {s} → {f} | Coils: {p['coils']} | Yield: {p['yield']}")
 
-    if st.button("Calculate Results"):
+    if st.button("show/update numbers"):
         st.session_state.page = 'results'
         st.rerun()
 
@@ -247,7 +247,7 @@ elif st.session_state.page == 'results':
     st.header("Hourly Breakdown")
 
     buckets = day_buckets if st.session_state.shift == "day" else night_buckets
-    shift_name = "Day Shift (6 AM - 6 PM)" if st.session_state.shift == "day" else "Night Shift (6 PM - 6 AM)"
+    shift_name = "Gay Shift (6 AM - 6 PM)" if st.session_state.shift == "day" else "Night Shift (6 PM - 6 AM)"
 
     yields, coils = apportion(st.session_state.periods, buckets)
 
@@ -273,7 +273,9 @@ elif st.session_state.page == 'results':
 
     st.subheader(shift_name)
     st.dataframe(styled, use_container_width=True)
-
+    if st.button("Add More Jobs"):
+        st.session_state.page = 'entry'
+        st.rerun()
     if st.button("Start Over"):
         for k in list(st.session_state.keys()):
             del st.session_state[k]
